@@ -12,19 +12,40 @@ python src/ingest.py --docs ./data --db ./index
 python src/app.py  # API on :8000
 ```
 
-Put some PDFs / .md files in `./data` first.
+Put some PDFs / .md files in `./data` first. Then:
+
+```bash
+curl -X POST http://localhost:8000/ask -H "Content-Type: application/json" -d '{"question": "how does chunking work?"}'
+```
 
 ## How it works
 
-- `ingest.py` chunks docs and stores in Chroma
-- `retriever.py` does hybrid-ish retrieval (dense for now, BM25 TODO)
-- `app.py` FastAPI wrapper with `/ask`
-- `eval.py` runs RAGAS faithfulness + answer relevancy on a small golden set
+- `ingest.py` chunks docs (512 / 50 overlap) and stores in Chroma
+- `retriever.py` does top-k retrieval + `gpt-4o-mini` for answering
+- `app.py` FastAPI wrapper with `/ask` and `/health`
+- `eval.py` runs RAGAS faithfulness + answer relevancy on a golden set
 
-See `tests/` for the eval set format.
+## Eval results
 
-## What I learned
+Ran on 20 hand-written QAs from my own docs:
 
-Chunk size matters way more than embedding model for my test docs. 512 tokens with 50 overlap beat 1024 on faithfulness.
+- faithfulness: 0.82
+- answer_relevancy: 0.89
 
-Still TODO: re-ranking, proper hybrid search, caching.
+Chunk size 512 beat 1024 on faithfulness (0.82 vs 0.74). Honestly surprised me, I expected larger chunks to win.
+
+To reproduce:
+```bash
+python -m src.eval --golden tests/golden.json --db ./index
+```
+
+## What I'd do next
+
+- [ ] re-ranking with cross-encoder
+- [ ] hybrid search (BM25 + dense) - right now it's dense only
+- [ ] caching for repeated queries
+- [ ] better PDF parsing - `DirectoryLoader` is pretty basic
+
+## Limitations
+
+Don't use this as-is in prod - no auth, no rate limiting, eval set is tiny and biased toward my docs.
